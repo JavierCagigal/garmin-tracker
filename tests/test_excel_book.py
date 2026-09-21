@@ -7,6 +7,8 @@ from openpyxl import load_workbook
 from garmin_tracker.activity_model import build_activity_row
 from garmin_tracker.aggregates import aggregate_by_week
 from garmin_tracker.excel_book import ACTIVITIES_SHEET_NAME, write_workbook
+from garmin_tracker.excel_chart_data import SHEET_NAME as CHART_DATA_SHEET_NAME
+from garmin_tracker.excel_charts import CHARTS_SHEET_NAME
 from garmin_tracker.excel_progression import SHEET_NAME as PROGRESSION_SHEET_NAME
 from garmin_tracker.excel_weekly import SHEET_NAME as WEEKLY_SHEET_NAME
 from garmin_tracker.progression import (
@@ -16,6 +18,7 @@ from garmin_tracker.progression import (
     current_personal_bests,
     efficiency_factor_deltas,
 )
+from garmin_tracker.progression import personal_best_history as compute_personal_best_history
 from tests.fixtures import indoor_cycling_activity, running_activity, strength_activity
 
 
@@ -28,14 +31,16 @@ def _write(rows, out_path: Path) -> None:
         out_path,
         activity_rows=rows,
         weekly_aggregates=weekly_aggregates,
+        continuous_totals=continuous_totals,
         weekly_comparisons=compute_weekly_deltas(continuous_totals),
         acwr_points=acwr_series(rows, continuous_totals),
         ef_deltas=efficiency_factor_deltas(weekly_aggregates),
         personal_bests=current_personal_bests(rows),
+        personal_best_history=compute_personal_best_history(rows),
     )
 
 
-def test_write_workbook_creates_all_three_sheets(tmp_path: Path) -> None:
+def test_write_workbook_creates_all_expected_sheets(tmp_path: Path) -> None:
     rows = [
         build_activity_row(running_activity()),
         build_activity_row(indoor_cycling_activity()),
@@ -47,7 +52,14 @@ def test_write_workbook_creates_all_three_sheets(tmp_path: Path) -> None:
 
     assert out_path.exists()
     wb = load_workbook(out_path)
-    assert wb.sheetnames == [ACTIVITIES_SHEET_NAME, WEEKLY_SHEET_NAME, PROGRESSION_SHEET_NAME]
+    assert wb.sheetnames == [
+        ACTIVITIES_SHEET_NAME,
+        WEEKLY_SHEET_NAME,
+        PROGRESSION_SHEET_NAME,
+        CHART_DATA_SHEET_NAME,
+        CHARTS_SHEET_NAME,
+    ]
+    assert wb[CHART_DATA_SHEET_NAME].sheet_state == "hidden"
 
 
 def test_activities_sheet_structure(tmp_path: Path) -> None:
@@ -109,5 +121,11 @@ def test_write_workbook_is_idempotent_when_regenerated(tmp_path: Path) -> None:
     _write(rows, out_path)  # segunda pasada no debe duplicar hojas ni romper nada
 
     wb = load_workbook(out_path)
-    assert wb.sheetnames == [ACTIVITIES_SHEET_NAME, WEEKLY_SHEET_NAME, PROGRESSION_SHEET_NAME]
+    assert wb.sheetnames == [
+        ACTIVITIES_SHEET_NAME,
+        WEEKLY_SHEET_NAME,
+        PROGRESSION_SHEET_NAME,
+        CHART_DATA_SHEET_NAME,
+        CHARTS_SHEET_NAME,
+    ]
     assert wb[ACTIVITIES_SHEET_NAME].max_row == 2

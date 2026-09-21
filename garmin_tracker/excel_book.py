@@ -14,6 +14,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from garmin_tracker.activity_model import ActivityRow
 from garmin_tracker.aggregates import WeeklyAggregate
+from garmin_tracker.excel_chart_data import write_chart_data_sheet
+from garmin_tracker.excel_charts import add_all_charts
 from garmin_tracker.excel_common import HEADER_FONT, save_workbook_atomic
 from garmin_tracker.excel_progression import write_progression_sheet
 from garmin_tracker.excel_weekly import write_weekly_sheet
@@ -118,10 +120,12 @@ def write_workbook(
     *,
     activity_rows: list[ActivityRow],
     weekly_aggregates: list[WeeklyAggregate],
+    continuous_totals: list[WeeklyAggregate],
     weekly_comparisons: list[WeeklyComparison],
     acwr_points: list[AcwrPoint],
     ef_deltas: list[EfficiencyFactorDelta],
     personal_bests: dict[int, PersonalBest],
+    personal_best_history: dict[int, list[PersonalBest]],
 ) -> None:
     wb = Workbook()
     wb.remove(wb.active)  # Workbook() crea una hoja "Sheet" vacía por defecto
@@ -135,5 +139,15 @@ def write_workbook(
         ef_deltas=ef_deltas,
         personal_bests=personal_bests,
     )
+
+    layout = write_chart_data_sheet(
+        wb,
+        activity_rows=activity_rows,
+        continuous_totals=continuous_totals,
+        acwr_points=acwr_points,
+        weekly_aggregates=weekly_aggregates,
+        personal_best_history=personal_best_history,
+    )
+    add_all_charts(wb, layout)
 
     save_workbook_atomic(wb, path)

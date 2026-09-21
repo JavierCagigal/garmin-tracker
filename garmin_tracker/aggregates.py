@@ -119,6 +119,21 @@ def build_week_aggregate(
     )
 
 
+def moving_average(values: list[float], window: int) -> list[float]:
+    """Media móvil hacia atrás INCLUYENDO el punto actual (a diferencia de
+    la media de 4 semanas de progression.py, que compara contra las 4
+    semanas ANTERIORES). Pensada para dibujar una línea de tendencia
+    superpuesta sobre un gráfico de barras: al principio de la serie, antes
+    de tener `window` puntos completos, promedia los que haya disponibles
+    en vez de dejarlo en blanco.
+    """
+    result: list[float] = []
+    for i in range(len(values)):
+        chunk = values[max(0, i - window + 1): i + 1]
+        result.append(sum(chunk) / len(chunk))
+    return result
+
+
 def aggregate_by_week(rows: list[ActivityRow]) -> list[WeeklyAggregate]:
     """Una fila TOTAL + una fila por deporte practicado, para cada semana
     ISO que tenga al menos una actividad. Orden cronológico ascendente."""

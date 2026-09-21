@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from garmin_tracker.activity_model import build_activity_row
-from garmin_tracker.aggregates import TOTAL_SPORT_KEY, aggregate_by_week, iso_week_key
+from garmin_tracker.aggregates import TOTAL_SPORT_KEY, aggregate_by_week, iso_week_key, moving_average
 from tests.fixtures import activity
 
 
@@ -65,6 +65,18 @@ def test_zone_split_easy_vs_intense() -> None:
     total = next(w for w in aggregate_by_week(rows) if w.sport_key == TOTAL_SPORT_KEY)
     assert total.pct_time_easy == pytest.approx(66.67, abs=0.1)
     assert total.pct_time_intense == pytest.approx(33.33, abs=0.1)
+
+
+def test_moving_average_uses_partial_window_at_the_start() -> None:
+    assert moving_average([10.0], window=4) == [10.0]
+    assert moving_average([10.0, 20.0], window=4) == [10.0, 15.0]
+
+
+def test_moving_average_uses_full_trailing_window_once_available() -> None:
+    values = [10.0, 20.0, 30.0, 40.0, 100.0]
+    result = moving_average(values, window=4)
+    # 5º punto: media de los 4 últimos (20,30,40,100) = 47.5
+    assert result[-1] == pytest.approx(47.5)
 
 
 def test_training_load_sums_across_week() -> None:
