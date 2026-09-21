@@ -12,9 +12,14 @@ testeables con datos de ejemplo fijos.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
+
+from garmin_tracker.training_load import edwards_trimp
+
+_FASTEST_SPLIT_RE = re.compile(r"^fastestSplit_(\d+)$")
 
 SPORT_LABELS: dict[str, str] = {
     "running": "Correr",
@@ -78,6 +83,10 @@ class ActivityRow:
     hr_zone_seconds: tuple[float | None, ...]
     temp_min_c: float | None
     temp_max_c: float | None
+    training_load: float | None
+    # distancia en metros -> tiempo en segundos del split más rápido de esa
+    # distancia dentro de la actividad (fastestSplit_*, ya calculado por Garmin).
+    best_splits: dict[int, float] = field(default_factory=dict)
 
 
 def _sport_label(sport_key: str) -> str:
@@ -94,6 +103,15 @@ def _first_present(raw: dict[str, Any], keys: tuple[str, ...]) -> float | None:
     return None
 
 
+def _extract_best_splits(raw: dict[str, Any]) -> dict[int, float]:
+    splits: dict[int, float] = {}
+    for key, value in raw.items():
+        match = _FASTEST_SPLIT_RE.match(key)
+        if match and value is not None:
+            splits[int(match.group(1))] = float(value)
+    return splits
+
+
 def build_activity_row(raw: dict[str, Any]) -> ActivityRow:
     start_local = datetime.strptime(raw["startTimeLocal"], "%Y-%m-%d %H:%M:%S")
 
@@ -106,6 +124,8 @@ def build_activity_row(raw: dict[str, Any]) -> ActivityRow:
     avg_pace_min_per_km = None
     if avg_speed_mps is not None and avg_speed_mps > 0 and sport_key in RUNNING_LIKE_SPORTS:
         avg_pace_min_per_km = 1000 / avg_speed_mps / 60
+
+    hr_zone_seconds = tuple(raw.get(f"hrTimeInZone_{i}") for i in range(1, 6))
 
     return ActivityRow(
         activity_id=raw["activityId"],
@@ -128,7 +148,9 @@ def build_activity_row(raw: dict[str, Any]) -> ActivityRow:
         aerobic_te=raw.get("aerobicTrainingEffect"),
         anaerobic_te=raw.get("anaerobicTrainingEffect"),
         vo2max=raw.get("vO2MaxValue"),
-        hr_zone_seconds=tuple(raw.get(f"hrTimeInZone_{i}") for i in range(1, 6)),
+        hr_zone_seconds=hr_zone_seconds,
         temp_min_c=raw.get("minTemperature"),
         temp_max_c=raw.get("maxTemperature"),
+        training_load=edwards_trimp(hr_zone_seconds),
+        best_splits=_extract_best_splits(raw),
     )

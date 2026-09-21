@@ -6,6 +6,37 @@ from __future__ import annotations
 from typing import Any
 
 
+def activity(
+    activity_id: int,
+    start_time_local: str,
+    sport: str = "running",
+    distance_m: float = 5000.0,
+    duration_s: float = 1500.0,
+    avg_hr: float | None = 140.0,
+    hr_zones: tuple[float | None, ...] = (60.0, 600.0, 700.0, 130.0, 10.0),
+    name: str = "Actividad de prueba",
+    **extra: Any,
+) -> dict[str, Any]:
+    """Constructor genérico y flexible, pensado para tests de agregados
+    semanales y progresión donde hacen falta muchas actividades repartidas
+    en varias semanas."""
+    base: dict[str, Any] = {
+        "activityId": activity_id,
+        "activityName": name,
+        "startTimeLocal": start_time_local,
+        "activityType": {"typeKey": sport},
+        "distance": distance_m,
+        "duration": duration_s,
+        "movingDuration": duration_s,
+        "averageSpeed": (distance_m / duration_s) if duration_s else 0.0,
+        "averageHR": avg_hr,
+    }
+    for i, zone_seconds in enumerate(hr_zones, start=1):
+        base[f"hrTimeInZone_{i}"] = zone_seconds
+    base.update(extra)
+    return base
+
+
 def running_activity(
     activity_id: int = 1001,
     start_time_local: str = "2026-09-20 09:13:31",
