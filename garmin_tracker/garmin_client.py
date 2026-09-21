@@ -17,6 +17,7 @@ from garminconnect import (
 )
 
 from garmin_tracker.config import Settings
+from garmin_tracker.retry import call_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,10 @@ def get_client(settings: Settings) -> Garmin:
         prompt_mfa=_prompt_mfa,
     )
     try:
-        client.login(settings.tokenstore)
+        call_with_retry(
+            lambda: client.login(settings.tokenstore),
+            description="login en Garmin Connect",
+        )
     except GarminConnectAuthenticationError:
         logger.error(
             "Autenticación rechazada por Garmin. Revisa GARMIN_EMAIL/GARMIN_PASSWORD "
