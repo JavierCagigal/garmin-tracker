@@ -15,9 +15,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from garmin_tracker import storage
 from garmin_tracker.activity_model import build_activity_row
+from garmin_tracker.aggregates import aggregate_by_week
 from garmin_tracker.config import load_settings
 from garmin_tracker.excel_book import write_workbook
 from garmin_tracker.logging_config import setup_logging
+from garmin_tracker.progression import (
+    acwr_series,
+    compute_weekly_deltas,
+    continuous_weekly_totals,
+    current_personal_bests,
+    efficiency_factor_deltas,
+)
 
 logger = logging.getLogger("generate_excel")
 
@@ -39,7 +47,22 @@ def main() -> int:
     rows = [build_activity_row(raw) for raw in raw_activities]
     logger.info("Generando Excel con %d actividades...", len(rows))
 
-    write_workbook(rows, settings.excel_path)
+    weekly_aggregates = aggregate_by_week(rows)
+    continuous_totals = continuous_weekly_totals(rows)
+    weekly_comparisons = compute_weekly_deltas(continuous_totals)
+    acwr_points = acwr_series(rows, continuous_totals)
+    ef_deltas = efficiency_factor_deltas(weekly_aggregates)
+    personal_bests = current_personal_bests(rows)
+
+    write_workbook(
+        settings.excel_path,
+        activity_rows=rows,
+        weekly_aggregates=weekly_aggregates,
+        weekly_comparisons=weekly_comparisons,
+        acwr_points=acwr_points,
+        ef_deltas=ef_deltas,
+        personal_bests=personal_bests,
+    )
     logger.info("Excel escrito en %s", settings.excel_path)
     return 0
 

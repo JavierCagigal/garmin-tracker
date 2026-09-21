@@ -1,28 +1,28 @@
-"""Generación del libro Excel (.xlsx) a partir de filas ya calculadas.
-
-Compatible con LibreOffice Calc: se usa openpyxl puro (formato OOXML
-estándar), sin ninguna característica exclusiva de Microsoft Excel.
-
-Escritura atómica: se escribe primero a un fichero temporal en el mismo
-directorio y solo se sustituye el definitivo si `wb.save()` termina sin
-errores, para no dejar nunca un .xlsx corrupto o a medias si algo falla a
-mitad de la generación.
+"""Generación del libro Excel (.xlsx) completo: orquesta las hojas
+Actividades, Semanal y Progresión sobre el mismo Workbook.
 """
 
 from __future__ import annotations
 
-import os
-import tempfile
 from datetime import timedelta
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.workbook import Workbook as WorkbookType
 from openpyxl.worksheet.worksheet import Worksheet
 
 from garmin_tracker.activity_model import ActivityRow
+from garmin_tracker.aggregates import WeeklyAggregate
+from garmin_tracker.excel_common import HEADER_FONT, save_workbook_atomic
+from garmin_tracker.excel_progression import write_progression_sheet
+from garmin_tracker.excel_weekly import write_weekly_sheet
+from garmin_tracker.progression import (
+    AcwrPoint,
+    EfficiencyFactorDelta,
+    PersonalBest,
+    WeeklyComparison,
+)
 
 ACTIVITIES_SHEET_NAME = "Actividades"
 
@@ -95,9 +95,8 @@ def write_activities_sheet(wb: WorkbookType, rows: list[ActivityRow]) -> Workshe
 
     headers = [header for header, _width, _fmt in _COLUMNS]
     ws.append(headers)
-    header_font = Font(bold=True)
     for cell in ws[1]:
-        cell.font = header_font
+        cell.font = HEADER_FONT
 
     for row in rows:
         ws.append(_row_values(row))
@@ -114,19 +113,27 @@ def write_activities_sheet(wb: WorkbookType, rows: list[ActivityRow]) -> Workshe
     return ws
 
 
-def write_workbook(rows: list[ActivityRow], path: Path) -> None:
+def write_workbook(
+    path: Path,
+    *,
+    activity_rows: list[ActivityRow],
+    weekly_aggregates: list[WeeklyAggregate],
+    weekly_comparisons: list[WeeklyComparison],
+    acwr_points: list[AcwrPoint],
+    ef_deltas: list[EfficiencyFactorDelta],
+    personal_bests: dict[int, PersonalBest],
+) -> None:
     wb = Workbook()
     wb.remove(wb.active)  # Workbook() crea una hoja "Sheet" vacía por defecto
 
-    write_activities_sheet(wb, rows)
+    write_activities_sheet(wb, activity_rows)
+    write_weekly_sheet(wb, weekly_aggregates)
+    write_progression_sheet(
+        wb,
+        weekly_comparisons=weekly_comparisons,
+        acwr_points=acwr_points,
+        ef_deltas=ef_deltas,
+        personal_bests=personal_bests,
+    )
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=".tmp-", suffix=".xlsx", dir=path.parent)
-    os.close(fd)
-    tmp_path = Path(tmp_name)
-    try:
-        wb.save(tmp_path)
-        os.replace(tmp_path, path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    save_workbook_atomic(wb, path)

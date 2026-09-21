@@ -263,6 +263,44 @@ def efficiency_factor_series(weekly_aggregates: list[WeeklyAggregate]) -> list[E
     return points
 
 
+@dataclass(frozen=True)
+class EfficiencyFactorDelta:
+    iso_year: int
+    iso_week: int
+    sport_key: str
+    sport_label: str
+    sessions: int
+    value: float | None
+    delta_vs_prev_practice: float | None  # vs. la última vez que se practicó ESE deporte
+    pct_vs_prev_practice: float | None
+
+
+def efficiency_factor_deltas(weekly_aggregates: list[WeeklyAggregate]) -> list[EfficiencyFactorDelta]:
+    """Compara el EF de cada semana con el de la última vez que se practicó
+    ese mismo deporte (no con la semana de calendario anterior, que podría
+    ser de otro deporte o no tener ninguna sesión de este)."""
+    last_value_by_sport: dict[str, float] = {}
+    deltas = []
+    for p in efficiency_factor_series(weekly_aggregates):
+        prev = last_value_by_sport.get(p.sport_key)
+        delta = (p.value - prev) if p.value is not None and prev is not None else None
+        deltas.append(
+            EfficiencyFactorDelta(
+                iso_year=p.iso_year,
+                iso_week=p.iso_week,
+                sport_key=p.sport_key,
+                sport_label=p.sport_label,
+                sessions=p.sessions,
+                value=p.value,
+                delta_vs_prev_practice=delta,
+                pct_vs_prev_practice=_pct(delta, prev),
+            )
+        )
+        if p.value is not None:
+            last_value_by_sport[p.sport_key] = p.value
+    return deltas
+
+
 # --------------------------------------------------------------------------
 # Mejores marcas por distancia estándar
 # --------------------------------------------------------------------------

@@ -11,6 +11,7 @@ from garmin_tracker.progression import (
     compute_weekly_deltas,
     continuous_weekly_totals,
     current_personal_bests,
+    efficiency_factor_deltas,
     efficiency_factor_series,
     personal_best_history,
 )
@@ -151,6 +152,30 @@ def test_efficiency_factor_is_speed_over_hr_and_skips_total() -> None:
     running_point = next(p for p in ef_points if p.sport_key == "running")
     expected_speed_kmh = (10000 / 3600) * 3.6
     assert running_point.value == pytest.approx(expected_speed_kmh / 150.0, rel=1e-3)
+
+
+def test_efficiency_factor_deltas_compare_to_last_practice_not_prior_calendar_week() -> None:
+    rows = [
+        build_activity_row(
+            activity(1, "2026-09-01 08:00:00", sport="running", distance_m=10000, duration_s=3600, avg_hr=150.0)
+        ),
+        # semana intermedia: solo ciclismo, sin running
+        build_activity_row(
+            activity(2, "2026-09-08 08:00:00", sport="cycling", distance_m=30000, duration_s=3600, avg_hr=130.0)
+        ),
+        # running mejora su EF dos semanas después (no una)
+        build_activity_row(
+            activity(3, "2026-09-15 08:00:00", sport="running", distance_m=10000, duration_s=3000, avg_hr=150.0)
+        ),
+    ]
+    from garmin_tracker.aggregates import aggregate_by_week
+
+    deltas = efficiency_factor_deltas(aggregate_by_week(rows))
+    running_deltas = [d for d in deltas if d.sport_key == "running"]
+
+    assert running_deltas[0].delta_vs_prev_practice is None  # primera vez, nada con qué comparar
+    assert running_deltas[1].delta_vs_prev_practice is not None
+    assert running_deltas[1].delta_vs_prev_practice > 0  # corrió más rápido con la misma FC -> mejora
 
 
 def test_personal_best_history_only_records_improvements() -> None:
