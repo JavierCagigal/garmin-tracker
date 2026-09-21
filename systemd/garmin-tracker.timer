@@ -1,0 +1,14 @@
+[Unit]
+Description=Ejecuta garmin-tracker.service los lunes por la mañana
+
+[Timer]
+OnCalendar=Mon *-*-* 07:00:00
+# Si el equipo estaba apagado/suspendido a esa hora, lo ejecuta en cuanto
+# vuelve a encenderse en vez de saltárselo.
+Persistent=true
+# Evita que, si algún día se usa en varias máquinas, todas golpeen la API
+# de Garmin en el mismo segundo exacto.
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target
