@@ -9,6 +9,7 @@ from garmin_tracker.aggregates import aggregate_by_week
 from garmin_tracker.excel_book import ACTIVITIES_SHEET_NAME, write_workbook
 from garmin_tracker.excel_chart_data import SHEET_NAME as CHART_DATA_SHEET_NAME
 from garmin_tracker.excel_charts import CHARTS_SHEET_NAME
+from garmin_tracker.excel_notes import SHEET_NAME as NOTES_SHEET_NAME
 from garmin_tracker.excel_progression import SHEET_NAME as PROGRESSION_SHEET_NAME
 from garmin_tracker.excel_weekly import SHEET_NAME as WEEKLY_SHEET_NAME
 from garmin_tracker.progression import (
@@ -56,6 +57,7 @@ def test_write_workbook_creates_all_expected_sheets(tmp_path: Path) -> None:
         ACTIVITIES_SHEET_NAME,
         WEEKLY_SHEET_NAME,
         PROGRESSION_SHEET_NAME,
+        NOTES_SHEET_NAME,
         CHART_DATA_SHEET_NAME,
         CHARTS_SHEET_NAME,
     ]
@@ -125,6 +127,7 @@ def test_write_workbook_is_idempotent_when_regenerated(tmp_path: Path) -> None:
         ACTIVITIES_SHEET_NAME,
         WEEKLY_SHEET_NAME,
         PROGRESSION_SHEET_NAME,
+        NOTES_SHEET_NAME,
         CHART_DATA_SHEET_NAME,
         CHARTS_SHEET_NAME,
     ]

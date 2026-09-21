@@ -17,6 +17,7 @@ from garmin_tracker.aggregates import WeeklyAggregate
 from garmin_tracker.excel_chart_data import write_chart_data_sheet
 from garmin_tracker.excel_charts import add_all_charts
 from garmin_tracker.excel_common import HEADER_FONT, save_workbook_atomic
+from garmin_tracker.excel_notes import read_existing_notes, write_notes_sheet
 from garmin_tracker.excel_progression import write_progression_sheet
 from garmin_tracker.excel_weekly import write_weekly_sheet
 from garmin_tracker.progression import (
@@ -127,6 +128,13 @@ def write_workbook(
     personal_bests: dict[int, PersonalBest],
     personal_best_history: dict[int, list[PersonalBest]],
 ) -> None:
+    # CRÍTICO: leer las notas manuales del Excel anterior ANTES de tocar
+    # nada. El fichero original en `path` no se escribe en ningún momento
+    # hasta el guardado atómico final, así que si esta lectura falla (fichero
+    # corrupto) la excepción aborta toda la función sin haber arriesgado el
+    # original.
+    existing_notes = read_existing_notes(path)
+
     wb = Workbook()
     wb.remove(wb.active)  # Workbook() crea una hoja "Sheet" vacía por defecto
 
@@ -139,6 +147,7 @@ def write_workbook(
         ef_deltas=ef_deltas,
         personal_bests=personal_bests,
     )
+    write_notes_sheet(wb, activity_rows, existing_notes)
 
     layout = write_chart_data_sheet(
         wb,
