@@ -94,3 +94,9 @@ Ciclismo · Fuerza · Notas.
   - unificar Ciclismo y Ciclismo indoor en Semanal;
   - una métrica de progresión para Ciclismo y Fuerza (p. ej. carga);
   - excluir las sesiones de correr muy lentas o cortas de la gráfica de ritmo.
+- Bici estática del gimnasio: registra 0 km. El usuario va a averiguar la
+  marca y el modelo para ver si emite datos por Bluetooth FTMS o ANT+ FE-C y
+  se puede vincular como sensor al Garmin. Su NFC es para Apple Watch
+  (GymKit) y no sirve con Garmin. Hasta entonces, Ciclismo se queda en
+  minutos y FC. Si empieza a haber km o potencia, añadirlos a
+  `excel_charts.SPORTS` (Ciclismo).
