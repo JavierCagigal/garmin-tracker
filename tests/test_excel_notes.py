@@ -10,30 +10,17 @@ from garmin_tracker.aggregates import aggregate_by_week
 from garmin_tracker.excel_book import write_workbook
 from garmin_tracker.excel_notes import SHEET_NAME as NOTES_SHEET_NAME
 from garmin_tracker.excel_notes import ManualNote, read_existing_notes
-from garmin_tracker.progression import (
-    acwr_series,
-    compute_weekly_deltas,
-    continuous_weekly_totals,
-    current_personal_bests,
-    efficiency_factor_deltas,
-)
-from garmin_tracker.progression import personal_best_history as compute_personal_best_history
+from garmin_tracker.progression import current_personal_bests
 from tests.fixtures import running_activity, strength_activity
 
 
 def _write(rows, out_path: Path) -> None:
     weekly_aggregates = aggregate_by_week(rows)
-    continuous_totals = continuous_weekly_totals(rows)
     write_workbook(
         out_path,
         activity_rows=rows,
         weekly_aggregates=weekly_aggregates,
-        continuous_totals=continuous_totals,
-        weekly_comparisons=compute_weekly_deltas(continuous_totals),
-        acwr_points=acwr_series(rows, continuous_totals),
-        ef_deltas=efficiency_factor_deltas(weekly_aggregates),
         personal_bests=current_personal_bests(rows),
-        personal_best_history=compute_personal_best_history(rows),
     )
 
 

@@ -12,9 +12,9 @@ from garmin_tracker.excel_common import FILL_TOTAL_ROW, apply_number_formats, au
 
 SHEET_NAME = "Semanal"
 
-_DURATION_FMT = "[h]:mm:ss"
+_DURATION_FMT = "h:mm:ss"
 _COLUMNS: list[tuple[str, str | None]] = [
-    ("Inicio semana (lunes)", "DD/MM/YYYY"),
+    ("Inicio semana (lunes)", "dd/mm/yyyy"),
     ("Año ISO", "0"),
     ("Semana ISO", "0"),
     ("Deporte", None),

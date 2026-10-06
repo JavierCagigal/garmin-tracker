@@ -5,7 +5,7 @@ from datetime import date, time
 import pytest
 
 from garmin_tracker.activity_model import build_activity_row
-from tests.fixtures import indoor_cycling_activity, running_activity, strength_activity
+from tests.fixtures import activity, indoor_cycling_activity, running_activity, strength_activity
 
 
 def test_running_activity_computes_pace_and_speed() -> None:
@@ -51,3 +51,10 @@ def test_unknown_sport_key_falls_back_to_readable_label() -> None:
     row = build_activity_row(activity)
 
     assert row.sport_label == "Stand up paddleboarding"
+
+
+def test_treadmill_and_track_running_are_grouped_as_running() -> None:
+    for sport in ("treadmill_running", "track_running", "running"):
+        row = build_activity_row(activity(1, "2026-09-20 09:00:00", sport=sport, distance_m=5000, duration_s=1500))
+        assert (row.sport_key, row.sport_label) == ("running", "Correr")
+        assert row.avg_pace_min_per_km == 5.0  # el ritmo sigue calculándose

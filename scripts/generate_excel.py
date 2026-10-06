@@ -19,14 +19,7 @@ from garmin_tracker.aggregates import aggregate_by_week
 from garmin_tracker.config import load_settings
 from garmin_tracker.excel_book import write_workbook
 from garmin_tracker.logging_config import setup_logging
-from garmin_tracker.progression import (
-    acwr_series,
-    compute_weekly_deltas,
-    continuous_weekly_totals,
-    current_personal_bests,
-    efficiency_factor_deltas,
-    personal_best_history as compute_personal_best_history,
-)
+from garmin_tracker.progression import current_personal_bests
 
 logger = logging.getLogger("generate_excel")
 
@@ -49,23 +42,13 @@ def main() -> int:
     logger.info("Generando Excel con %d actividades...", len(rows))
 
     weekly_aggregates = aggregate_by_week(rows)
-    continuous_totals = continuous_weekly_totals(rows)
-    weekly_comparisons = compute_weekly_deltas(continuous_totals)
-    acwr_points = acwr_series(rows, continuous_totals)
-    ef_deltas = efficiency_factor_deltas(weekly_aggregates)
-    pb_history = compute_personal_best_history(rows)
     personal_bests = current_personal_bests(rows)
 
     write_workbook(
         settings.excel_path,
         activity_rows=rows,
         weekly_aggregates=weekly_aggregates,
-        continuous_totals=continuous_totals,
-        weekly_comparisons=weekly_comparisons,
-        acwr_points=acwr_points,
-        ef_deltas=ef_deltas,
         personal_bests=personal_bests,
-        personal_best_history=pb_history,
     )
     logger.info("Excel escrito en %s", settings.excel_path)
     return 0

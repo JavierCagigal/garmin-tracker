@@ -50,6 +50,14 @@ RUNNING_LIKE_SPORTS = {
     "running", "trail_running", "track_running", "treadmill_running", "walking", "hiking",
 }
 
+# Variantes de un mismo deporte que se agrupan en una sola categoría en todo
+# el Excel (semanal, progresión, gráficas). El tipo original sigue en la
+# caché SQLite por si algún día hace falta distinguirlas.
+SPORT_GROUPS: dict[str, str] = {
+    "treadmill_running": "running",
+    "track_running": "running",
+}
+
 # Garmin usa un nombre de campo de cadencia distinto según el deporte.
 CADENCE_FIELDS = (
     "averageRunningCadenceInStepsPerMinute",
@@ -131,12 +139,14 @@ def build_activity_row(raw: dict[str, Any]) -> ActivityRow:
         activity_id=raw["activityId"],
         date=start_local.date(),
         start_time=start_local.time(),
-        sport_key=sport_key,
-        sport_label=_sport_label(sport_key),
+        sport_key=SPORT_GROUPS.get(sport_key, sport_key),
+        sport_label=_sport_label(SPORT_GROUPS.get(sport_key, sport_key)),
         name=raw.get("activityName") or "",
         distance_km=distance_m / 1000 if distance_m is not None else None,
-        duration=timedelta(seconds=duration_seconds),
-        moving_duration=timedelta(seconds=moving_seconds) if moving_seconds is not None else None,
+        # Redondeado al segundo: Garmin da milésimas y Numbers las muestra
+        # ("12:11.970") aunque el formato sea h:mm:ss.
+        duration=timedelta(seconds=round(duration_seconds)),
+        moving_duration=timedelta(seconds=round(moving_seconds)) if moving_seconds is not None else None,
         avg_pace_min_per_km=avg_pace_min_per_km,
         avg_speed_kmh=avg_speed_mps * 3.6 if avg_speed_mps is not None else None,
         avg_hr=raw.get("averageHR"),

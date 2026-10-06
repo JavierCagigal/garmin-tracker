@@ -14,26 +14,20 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from garmin_tracker.activity_model import ActivityRow
 from garmin_tracker.aggregates import WeeklyAggregate
-from garmin_tracker.excel_chart_data import write_chart_data_sheet
-from garmin_tracker.excel_charts import add_all_charts
+from garmin_tracker.excel_charts import add_sport_sheets
 from garmin_tracker.excel_common import HEADER_FONT, save_workbook_atomic
 from garmin_tracker.excel_notes import read_existing_notes, write_notes_sheet
 from garmin_tracker.excel_progression import write_progression_sheet
 from garmin_tracker.excel_weekly import write_weekly_sheet
-from garmin_tracker.progression import (
-    AcwrPoint,
-    EfficiencyFactorDelta,
-    PersonalBest,
-    WeeklyComparison,
-)
+from garmin_tracker.progression import PersonalBest
 
 ACTIVITIES_SHEET_NAME = "Actividades"
 
 # (cabecera, ancho de columna, formato numérico o None para texto)
-_DURATION_FMT = "[h]:mm:ss"
+_DURATION_FMT = "h:mm:ss"
 _COLUMNS: list[tuple[str, int, str | None]] = [
-    ("Fecha", 12, "DD/MM/YYYY"),
-    ("Hora inicio", 11, "HH:MM:SS"),
+    ("Fecha", 12, "dd/mm/yyyy"),
+    ("Hora inicio", 11, "hh:mm:ss"),
     ("Deporte", 20, None),
     ("Nombre", 32, None),
     ("Distancia (km)", 14, "0.00"),
@@ -121,12 +115,7 @@ def write_workbook(
     *,
     activity_rows: list[ActivityRow],
     weekly_aggregates: list[WeeklyAggregate],
-    continuous_totals: list[WeeklyAggregate],
-    weekly_comparisons: list[WeeklyComparison],
-    acwr_points: list[AcwrPoint],
-    ef_deltas: list[EfficiencyFactorDelta],
     personal_bests: dict[int, PersonalBest],
-    personal_best_history: dict[int, list[PersonalBest]],
 ) -> None:
     # CRÍTICO: leer las notas manuales del Excel anterior ANTES de tocar
     # nada. El fichero original en `path` no se escribe en ningún momento
@@ -140,23 +129,8 @@ def write_workbook(
 
     write_activities_sheet(wb, activity_rows)
     write_weekly_sheet(wb, weekly_aggregates)
-    write_progression_sheet(
-        wb,
-        weekly_comparisons=weekly_comparisons,
-        acwr_points=acwr_points,
-        ef_deltas=ef_deltas,
-        personal_bests=personal_bests,
-    )
+    write_progression_sheet(wb, rows=activity_rows, personal_bests=personal_bests)
+    add_sport_sheets(wb, activity_rows)
     write_notes_sheet(wb, activity_rows, existing_notes)
-
-    layout = write_chart_data_sheet(
-        wb,
-        activity_rows=activity_rows,
-        continuous_totals=continuous_totals,
-        acwr_points=acwr_points,
-        weekly_aggregates=weekly_aggregates,
-        personal_best_history=personal_best_history,
-    )
-    add_all_charts(wb, layout)
 
     save_workbook_atomic(wb, path)

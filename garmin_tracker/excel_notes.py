@@ -116,7 +116,7 @@ def write_notes_sheet(
             [activity_id, None, None, "(ya no está en la caché)", note.rpe, note.sensaciones, note.lesiones, note.contexto]
         )
 
-    apply_number_formats(ws, ["0", "DD/MM/YYYY", None, None, None, None, None, None], start_row=2, end_row=ws.max_row)
+    apply_number_formats(ws, ["0", "dd/mm/yyyy", None, None, None, None, None, None], start_row=2, end_row=ws.max_row)
     autofit_columns(ws)
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions

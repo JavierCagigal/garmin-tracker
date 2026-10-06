@@ -1,165 +1,191 @@
-"""Gráficas NATIVAS de Excel (openpyxl.chart), no imágenes incrustadas: los
-gráficos referencian celdas reales de la hoja "_ChartData", así que si se
-tocan esos datos y se regenera el libro, el gráfico se actualiza solo.
+"""Una pestaña por deporte (Correr, Natación, Ciclismo, Fuerza): a la
+izquierda una tabla semanal (lunes a domingo, todo el histórico, incluidas
+las semanas de descanso para que el eje de tiempo sea continuo) y a la
+derecha sus gráficas NATIVAS (openpyxl.chart, no imágenes), que leen
+directamente esa tabla.
+
+Cada título lleva el deporte y el valor de la última semana con datos
+("Natación · Ritmo /100 m · última semana: 2:20"), para que nunca haya
+duda de a qué modalidad pertenece una gráfica.
 """
 
 from __future__ import annotations
 
-from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import date, timedelta
+from typing import Callable
+
+from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.chart.label import DataLabelList
 from openpyxl.workbook.workbook import Workbook
 
-from garmin_tracker.excel_chart_data import ChartDataLayout
-from garmin_tracker.progression import STANDARD_DISTANCES_M
-
-CHARTS_SHEET_NAME = "Gráficas"
+from garmin_tracker.activity_model import ActivityRow
+from garmin_tracker.excel_common import TITLE_FONT, autofit_columns, write_header
 
 
-def _add_volume_chart(ws, data_ws, layout: ChartDataLayout, anchor: str) -> None:
-    if layout.weekly_row_count == 0:
-        return
-    header_row = layout.weekly_header_row
-    last_row = header_row + layout.weekly_row_count
-    cats = Reference(data_ws, min_col=1, max_col=1, min_row=header_row + 1, max_row=last_row)
-
-    bar = BarChart()
-    bar.type = "col"
-    bar.title = "Volumen semanal (km) y media móvil 4 semanas"
-    bar.y_axis.title = "km"
-    bar.x_axis.title = "Semana"
-    bar.add_data(Reference(data_ws, min_col=2, max_col=2, min_row=header_row, max_row=last_row), titles_from_data=True)
-    bar.set_categories(cats)
-
-    line = LineChart()
-    line.add_data(Reference(data_ws, min_col=3, max_col=3, min_row=header_row, max_row=last_row), titles_from_data=True)
-    for s in line.series:
-        s.marker.symbol = "none"
-        s.smooth = False
-
-    bar += line
-    bar.width, bar.height = 24, 10
-    ws.add_chart(bar, anchor)
+def _km(rows: list[ActivityRow]) -> float:
+    return sum(r.distance_km or 0.0 for r in rows)
 
 
-def _add_efficiency_factor_chart(ws, data_ws, layout: ChartDataLayout, anchor: str) -> None:
-    if layout.ef_row_count == 0 or not layout.ef_sports:
-        return
-    header_row = layout.ef_header_row
-    last_row = header_row + layout.ef_row_count
-    cats = Reference(data_ws, min_col=layout.ef_start_col, max_col=layout.ef_start_col, min_row=header_row + 1, max_row=last_row)
+def _minutes(rows: list[ActivityRow]) -> float:
+    return sum(r.duration.total_seconds() for r in rows) / 60
 
-    chart = LineChart()
-    chart.title = "Evolución del Efficiency Factor por deporte"
-    chart.y_axis.title = "km/h por lpm"
-    chart.x_axis.title = "Semana"
-    data = Reference(
-        data_ws,
-        min_col=layout.ef_start_col + 1,
-        max_col=layout.ef_start_col + len(layout.ef_sports),
-        min_row=header_row,
-        max_row=last_row,
+
+def _pace(rows: list[ActivityRow], per_m: int) -> timedelta | None:
+    """Ritmo ponderado: tiempo en movimiento total / distancia total, por
+    `per_m` metros (no la media de los ritmos de cada sesión)."""
+    with_distance = [r for r in rows if r.distance_km]
+    km = _km(with_distance)
+    if not km:
+        return None
+    seconds = sum((r.moving_duration or r.duration).total_seconds() for r in with_distance)
+    return timedelta(seconds=seconds / (km * 1000) * per_m)
+
+
+def _avg_hr(rows: list[ActivityRow]) -> float | None:
+    pairs = [(r.avg_hr, r.duration.total_seconds()) for r in rows if r.avg_hr]
+    total = sum(s for _, s in pairs)
+    return sum(hr * s for hr, s in pairs) / total if total else None
+
+
+@dataclass(frozen=True)
+class _Metric:
+    name: str
+    unit: str  # para el título; "" si no aplica
+    compute: Callable[[list[ActivityRow]], float | timedelta | None]
+    number_format: str
+    chart: str | None  # "bar", "line" o None (solo en la tabla)
+
+
+@dataclass(frozen=True)
+class _Sport:
+    name: str  # también es el nombre de la pestaña
+    keys: frozenset[str]
+    metrics: list[_Metric]
+
+
+_SESSIONS = _Metric("Sesiones", "", len, "0", None)
+_HR = _Metric("FC media (lpm)", "lpm", _avg_hr, "0", "line")
+
+SPORTS = [
+    _Sport("Correr", frozenset({"running", "trail_running"}), [
+        _SESSIONS,
+        _Metric("Km", "km", _km, "0.0", "bar"),
+        _Metric("Ritmo /km", "/km", lambda rs: _pace(rs, 1000), "m:ss", "line"),
+        _HR,
+    ]),
+    _Sport("Natación", frozenset({"lap_swimming", "open_water_swimming"}), [
+        _SESSIONS,
+        _Metric("Metros", "m", lambda rs: _km(rs) * 1000, "#,##0", "bar"),
+        _Metric("Ritmo /100 m", "/100 m", lambda rs: _pace(rs, 100), "m:ss", "line"),
+        _HR,
+    ]),
+    # Casi todo es rodillo (0 km), así que el volumen va en minutos, no en km.
+    _Sport("Ciclismo", frozenset({"cycling", "indoor_cycling", "road_biking", "mountain_biking", "gravel_cycling"}), [
+        _SESSIONS,
+        _Metric("Minutos", "min", _minutes, "0", "bar"),
+        _HR,
+    ]),
+    _Sport("Fuerza", frozenset({"strength_training"}), [
+        _Metric("Sesiones", "", len, "0", "bar"),
+        _Metric("Minutos", "min", _minutes, "0", "bar"),
+        _HR,
+    ]),
+]
+SPORT_SHEET_NAMES = [s.name for s in SPORTS]
+
+_TABLE_HEADER_ROW = 3
+_PACE_HINT = " (menos es mejor)"
+
+
+def _format(value: float | timedelta, number_format: str) -> str:
+    if isinstance(value, timedelta):
+        minutes, seconds = divmod(round(value.total_seconds()), 60)
+        return f"{minutes}:{seconds:02d}"
+    if number_format == "0.0":
+        return f"{value:.1f}".replace(".", ",")
+    return f"{round(value):,}".replace(",", ".")
+
+
+def _labels(number_format: str) -> DataLabelList:
+    # Los show* a False explícitos: si faltan, Excel pinta también el nombre
+    # de la serie y la categoría en cada etiqueta.
+    return DataLabelList(
+        numFmt=number_format, showVal=True,
+        showSerName=False, showCatName=False, showLegendKey=False, showPercent=False,
     )
-    chart.add_data(data, titles_from_data=True)
-    chart.set_categories(cats)
-    for s in chart.series:
-        s.smooth = False
-    chart.width, chart.height = 24, 10
-    ws.add_chart(chart, anchor)
 
 
-def _add_load_acwr_chart(ws, data_ws, layout: ChartDataLayout, anchor: str) -> None:
-    if layout.weekly_row_count == 0:
+def _chart(kind: str, title: str, number_format: str):
+    chart = BarChart() if kind == "bar" else LineChart()
+    chart.title = title
+    chart.legend = None
+    chart.dataLabels = _labels(number_format)
+    chart.y_axis.number_format = number_format
+    chart.y_axis.majorGridlines = None
+    # openpyxl 3.1 deja los ejes sin `delete=0` y Excel/Numbers recientes
+    # los ocultan: hay que decirlo explícitamente.
+    chart.x_axis.delete = False
+    chart.y_axis.delete = False
+    chart.width, chart.height = 20, 7.5
+    if kind == "bar":
+        chart.type = "col"
+        chart.gapWidth = 30  # columnas pegadas (por defecto 150)
+    return chart
+
+
+def add_sport_sheets(wb: Workbook, rows: list[ActivityRow]) -> None:
+    if not rows:
         return
-    header_row = layout.weekly_header_row
-    last_row = header_row + layout.weekly_row_count
-    cats = Reference(data_ws, min_col=1, max_col=1, min_row=header_row + 1, max_row=last_row)
+    by_week: dict[date, list[ActivityRow]] = defaultdict(list)
+    for r in rows:
+        by_week[r.date - timedelta(days=r.date.weekday())].append(r)
+    # Mismo eje de semanas en todas las pestañas, para poder compararlas.
+    first, last = min(by_week), max(by_week)
+    mondays = [first + timedelta(weeks=i) for i in range((last - first).days // 7 + 1)]
 
-    bar = BarChart()
-    bar.type = "col"
-    bar.title = "Carga de entrenamiento semanal y ACWR (banda recomendada 0.8-1.3)"
-    bar.y_axis.title = "Carga (TRIMP, UA)"
-    bar.x_axis.title = "Semana"
-    bar.add_data(Reference(data_ws, min_col=4, max_col=4, min_row=header_row, max_row=last_row), titles_from_data=True)
-    bar.set_categories(cats)
-
-    line = LineChart()
-    # columnas 5-7: ACWR, banda mínima (0.8), banda máxima (1.3)
-    line.add_data(Reference(data_ws, min_col=5, max_col=7, min_row=header_row, max_row=last_row), titles_from_data=True)
-    line.y_axis.axId = 200
-    line.y_axis.title = "ACWR (ratio)"
-    # OJO: la receta "oficial" de openpyxl pone `crosses='max'` en el eje
-    # PRIMARIO (bar.y_axis) — probado así, en LibreOffice Calc coloca cada
-    # eje en el lado correcto (izquierda/derecha) pero le asigna a cada
-    # serie la escala del OTRO eje (confirmado reproduciendo el ejemplo
-    # mínimo de la propia documentación de openpyxl: mismo fallo). Puesto en
-    # el eje SECUNDARIO en su lugar, en LibreOffice sale correcto. No he
-    # podido verificarlo contra Excel real (no hay licencia disponible); si
-    # algún día lo abres con Excel y ves las escalas cambiadas, es la pista.
-    line.y_axis.crosses = "max"
-
-    styles = [("4472C4", False), ("A6A6A6", True), ("A6A6A6", True)]
-    for s, (color, dashed) in zip(line.series, styles):
-        s.marker.symbol = "none"
-        s.smooth = False
-        s.graphicalProperties.line.solidFill = color
-        if dashed:
-            s.graphicalProperties.line.dashStyle = "dash"
-            s.graphicalProperties.line.width = 9525  # EMU (~0.75pt), línea fina de referencia
-
-    bar += line
-    bar.width, bar.height = 24, 10
-    ws.add_chart(bar, anchor)
-
-
-def _add_sport_distribution_chart(ws, data_ws, layout: ChartDataLayout, anchor: str) -> None:
-    if layout.dist_row_count == 0:
-        return
-    header_row = layout.dist_header_row
-    last_row = header_row + layout.dist_row_count
-    labels = Reference(data_ws, min_col=layout.dist_start_col, max_col=layout.dist_start_col, min_row=header_row + 1, max_row=last_row)
-    data = Reference(data_ws, min_col=layout.dist_start_col + 1, max_col=layout.dist_start_col + 1, min_row=header_row, max_row=last_row)
-
-    pie = PieChart()
-    pie.title = "Distribución de sesiones por deporte"
-    pie.add_data(data, titles_from_data=True)
-    pie.set_categories(labels)
-    pie.width, pie.height = 14, 10
-    ws.add_chart(pie, anchor)
-
-
-def _add_personal_best_charts(ws, data_ws, layout: ChartDataLayout, anchor_col: str, start_row: int) -> None:
-    row_cursor = start_row
-    for distance_m in sorted(layout.pb_blocks):
-        col, count = layout.pb_blocks[distance_m]
-        if count == 0:
+    for sport in SPORTS:
+        weeks = [[r for r in by_week.get(m, []) if r.sport_key in sport.keys] for m in mondays]
+        if not any(weeks):
             continue
-        header_row = layout.pb_header_row
-        last_row = header_row + count
-        cats = Reference(data_ws, min_col=col, max_col=col, min_row=header_row + 1, max_row=last_row)
-        data = Reference(data_ws, min_col=col + 1, max_col=col + 1, min_row=header_row, max_row=last_row)
+        latest = max(i for i, w in enumerate(weeks) if w)
 
-        chart = LineChart()
-        chart.title = f"Progresión marca — {STANDARD_DISTANCES_M[distance_m]}"
-        chart.y_axis.title = "Tiempo"
-        chart.y_axis.number_format = "mm:ss" if distance_m < 10000 else "[h]:mm:ss"
-        chart.x_axis.title = "Fecha"
-        chart.add_data(data, titles_from_data=True)
-        chart.set_categories(cats)
-        for s in chart.series:
-            s.marker.symbol = "circle"
-            s.smooth = False
-        chart.width, chart.height = 14, 9
-        ws.add_chart(chart, f"{anchor_col}{row_cursor}")
-        row_cursor += 19
+        ws = wb.create_sheet(sport.name)
+        write_header(ws, ["Semana (lunes)"] + [m.name for m in sport.metrics], row=_TABLE_HEADER_ROW)
+        first_row = _TABLE_HEADER_ROW + 1
+        last_row = first_row + len(mondays) - 1
+        for i, (monday, week_rows) in enumerate(zip(mondays, weeks)):
+            # "d mmm" (17 ago) y no dd/mm/yyyy: el eje de las gráficas toma
+            # este formato y con la fecha completa se salta semanas.
+            ws.cell(row=first_row + i, column=1, value=monday).number_format = "d mmm yy"
+            if not week_rows:
+                continue
+            for col, metric in enumerate(sport.metrics, start=2):
+                ws.cell(row=first_row + i, column=col, value=metric.compute(week_rows)).number_format = metric.number_format
+        autofit_columns(ws)
+        # El título va después del autoajuste para no ensanchar la columna A.
+        ws.cell(row=1, column=1, value=f"{sport.name} — resumen semanal (lunes a domingo; fila vacía = semana sin {sport.name.lower()})").font = TITLE_FONT
 
-
-def add_all_charts(wb: Workbook, layout: ChartDataLayout) -> None:
-    if CHARTS_SHEET_NAME in wb.sheetnames:
-        del wb[CHARTS_SHEET_NAME]
-    ws = wb.create_sheet(CHARTS_SHEET_NAME)
-    data_ws = wb[layout.sheet_name]
-
-    _add_volume_chart(ws, data_ws, layout, "B2")
-    _add_efficiency_factor_chart(ws, data_ws, layout, "B22")
-    _add_load_acwr_chart(ws, data_ws, layout, "B42")
-    _add_sport_distribution_chart(ws, data_ws, layout, "S2")
-    _add_personal_best_charts(ws, data_ws, layout, anchor_col="S", start_row=22)
+        cats = Reference(ws, min_col=1, min_row=first_row, max_row=last_row)
+        anchor_col = len(sport.metrics) + 3  # una columna libre tras la tabla
+        chart_row = _TABLE_HEADER_ROW
+        for col, metric in enumerate(sport.metrics, start=2):
+            if metric.chart is None:
+                continue
+            latest_value = metric.compute(weeks[latest])
+            if latest_value is None and all(metric.compute(w) is None for w in weeks if w):
+                continue  # p. ej. sin datos de FC en ningún entreno
+            is_pace = metric.number_format == "m:ss"
+            unit = "" if is_pace else metric.unit  # el /km ya va en el nombre
+            summary = f"{_format(latest_value, metric.number_format)} {unit}".rstrip() if latest_value is not None else "sin datos"
+            hint = _PACE_HINT if is_pace else ""
+            chart = _chart(metric.chart, f"{sport.name} · {metric.name}{hint} · última semana: {summary}", metric.number_format)
+            chart.add_data(Reference(ws, min_col=col, min_row=_TABLE_HEADER_ROW, max_row=last_row), titles_from_data=True)
+            chart.set_categories(cats)
+            if metric.chart == "line":
+                for s in chart.series:
+                    s.marker.symbol = "circle"
+                    s.smooth = False
+            ws.add_chart(chart, f"{ws.cell(row=1, column=anchor_col).column_letter}{chart_row}")
+            chart_row += 19  # alto del gráfico + margen (Numbers usa filas más altas)
