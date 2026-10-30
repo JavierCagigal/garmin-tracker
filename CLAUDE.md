@@ -25,8 +25,11 @@ Proyecto personal. Se responde en español.
 
 ## Automatización semanal (launchd, no systemd)
 
-`launchd/com.javiercagigal.garmin-tracker.plist` hace sync + Excel + web **los
-lunes a las 07:00**. Instalado en `~/Library/LaunchAgents/`. Tras formatear:
+`launchd/com.javiercagigal.garmin-tracker.plist` lanza `scripts/weekly.sh` **los
+lunes a las 07:00**: sync + Excel + web, y publica la web (copia a
+`docs/index.html`, commit de solo ese archivo y push a master; si el repo no
+está en master, no publica). Los cambios en el job van en `weekly.sh`, que no
+obliga a reinstalar el plist. Instalado en `~/Library/LaunchAgents/`. Tras formatear:
 
 ```bash
 mkdir -p ~/Library/LaunchAgents && cp launchd/*.plist ~/Library/LaunchAgents/
@@ -73,8 +76,9 @@ Secciones: KPIs de la última semana (+ VO2máx), resumen del periodo elegido,
 tiempo semanal por deporte + constancia, zonas de FC + carga (TRIMP, media 4 sem),
 panel por deporte, hábitos (día de la semana y hora), mejores marcas, récords
 históricos y últimas actividades.
-Pendiente: publicarla en GitHub Pages. El repo es privado y Pages siempre es
-público; está sin decidir si se hace público o se usa un repo aparte.
+Se publica en GitHub Pages desde `master:/docs`
+(https://javiercagigal.github.io/garmin-tracker/). El usuario aceptó que el repo y
+la web sean públicos (fechas, FC y nombres de actividades; nunca GPS).
 
 ## Decisiones tomadas con el usuario
 

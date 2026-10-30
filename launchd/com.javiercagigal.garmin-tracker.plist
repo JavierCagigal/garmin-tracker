@@ -6,7 +6,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string><string>-c</string>
-    <string>cd "$HOME/garmin-tracker" &amp;&amp; ./.venv/bin/python scripts/sync.py &amp;&amp; ./.venv/bin/python scripts/generate_excel.py &amp;&amp; ./.venv/bin/python scripts/generate_web.py</string>
+    <string>"$HOME/garmin-tracker/scripts/weekly.sh"</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
