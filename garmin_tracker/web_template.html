@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrenamientos</title>
+<!-- Plantilla de garmin_tracker/web.py: __DATA__ se sustituye por el JSON de los datos. -->
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f0efec;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --good: #006300; --bad: #b42323;
+  /* s1..s4 = SPORTS (Correr, Natación, Ciclismo, Fuerza); violeta = todos los deportes juntos */
+  --s1: #e34948; --s2: #2a78d6; --s3: #1baf7a; --s4: #eda100; --s0: #898781;
+  --accent: #6250d6;
+  --h1: #d9d4f7; --h2: #a99ff0; --h3: #7a6ce2; --h4: #4a3aa7;
+  --z1: #c9c2f5; --z2: #a196ec; --z3: #7a6ce2; --z4: #5646c4; --z5: #362a8c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #262624;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --good: #0ca30c; --bad: #e66767;
+    --s1: #e66767; --s2: #3987e5; --s3: #199e70; --s4: #c98500;
+    --accent: #9085e9;
+    --h1: #2e2862; --h2: #4a3aa7; --h3: #7a6ce2; --h4: #b3aaf3;
+    --z1: #3a3180; --z2: #5646c4; --z3: #7a6ce2; --z4: #a196ec; --z5: #c9c2f5;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1200px; margin: 0 auto; padding: 32px 16px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); margin: 36px 0 12px; font-weight: 600; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); margin: 0 0 12px; font-weight: 600; }
+.sub { color: var(--muted); font-size: 13px; }
+.pills { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+.pills button {
+  border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 13px;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+}
+.pills button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+.grid-even { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.line-key { width: 14px; height: 2px; display: inline-block; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; min-width: 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi .label { color: var(--ink-2); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.kpi .value { font-size: 26px; font-weight: 600; margin: 4px 0 2px; letter-spacing: -0.01em; }
+.kpi .value small { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+.kpi .delta { font-size: 12px; color: var(--muted); min-height: 18px; }
+.up { color: var(--good); } .down { color: var(--bad); }
+.spark { display: block; width: 100%; height: 32px; margin-top: 8px; overflow: visible; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.sports { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.chart { position: relative; height: 220px; }
+.chart.small { height: 170px; }
+.sport-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sport-head strong { font-size: 16px; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--ink-2); font-size: 13px; margin-bottom: 12px; }
+.facts b { color: var(--ink); font-weight: 600; }
+.hint { color: var(--muted); font-size: 12px; margin: 10px 0 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.heat { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-rows: repeat(7, auto); gap: 3px; }
+.heat div { aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); }
+.heat .l1 { background: var(--h1); } .heat .l2 { background: var(--h2); }
+.heat .l3 { background: var(--h3); } .heat .l4 { background: var(--h4); }
+.heat .out { visibility: hidden; }
+.heat-wrap { display: grid; grid-template-columns: auto 1fr; gap: 6px; font-size: 10px; color: var(--muted); }
+.heat-days { display: grid; grid-template-rows: repeat(7, 1fr); gap: 3px; }
+.scale { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); margin-top: 10px; }
+.scale i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.streak { font-size: 28px; font-weight: 600; }
+.bests { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 12px; }
+.best .value { font-size: 24px; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 0 10px 8px; border-bottom: 1px solid var(--grid); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--grid); }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+@media (max-width: 760px) { .grid-2, .grid-even, .sports { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Entrenamientos</h1>
+      <div class="sub" id="meta"></div>
+    </div>
+    <div class="pills" id="range" role="group" aria-label="Periodo de las gráficas">
+      <button data-weeks="4">4 sem</button>
+      <button data-weeks="8">8 sem</button>
+      <button data-weeks="12">12 sem</button>
+      <button data-weeks="0">Todo</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis"></section>
+
+  <h2 id="period-title">Resumen del periodo</h2>
+  <section class="kpis" id="period"></section>
+
+  <h2>Tendencias</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Tiempo semanal por deporte</h3>
+      <div class="legend" id="legend"></div>
+      <div class="chart" style="height:320px"><canvas id="weekly"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Constancia</h3>
+      <div class="sub">Semanas seguidas entrenando</div>
+      <div class="streak" id="streak"></div>
+      <div class="sub" id="streak-sub" style="margin-bottom:14px"></div>
+      <div class="heat-wrap">
+        <div class="heat-days"><span>L</span><span></span><span>X</span><span></span><span>V</span><span></span><span>D</span></div>
+        <div class="heat" id="heat"></div>
+      </div>
+      <div class="scale">menos <i style="background:var(--surface-2)"></i><i style="background:var(--h1)"></i><i style="background:var(--h2)"></i><i style="background:var(--h3)"></i><i style="background:var(--h4)"></i> más minutos</div>
+    </div>
+  </div>
+
+  <h2>Intensidad y carga</h2>
+  <div class="grid-even">
+    <div class="card">
+      <h3>Tiempo en cada zona de FC</h3>
+      <div class="legend" id="zone-legend"></div>
+      <div class="chart"><canvas id="zones"></canvas></div>
+      <div class="hint" id="zone-hint"></div>
+    </div>
+    <div class="card">
+      <h3>Carga semanal</h3>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--accent)"></span>Carga</span>
+        <span><span class="line-key" style="background:var(--ink-2)"></span>Media de 4 semanas</span>
+      </div>
+      <div class="chart"><canvas id="load"></canvas></div>
+      <div class="hint">Carga = minutos en cada zona × número de la zona (TRIMP de Edwards): un minuto en Z5 pesa 5 veces uno en Z1. Sirve para comparar tus semanas entre sí.</div>
+    </div>
+  </div>
+
+  <h2>Por deporte</h2>
+  <section class="sports" id="sports"></section>
+
+  <h2>Hábitos</h2>
+  <div class="grid-even">
+    <div class="card">
+      <h3>Sesiones por día de la semana</h3>
+      <div class="legend sport-legend"></div>
+      <div class="chart"><canvas id="dow"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>A qué hora entrenas</h3>
+      <div class="legend sport-legend"></div>
+      <div class="chart"><canvas id="hours"></canvas></div>
+    </div>
+  </div>
+
+  <h2>Mejores marcas · correr</h2>
+  <section class="bests" id="bests"></section>
+
+  <h2>Récords · todo el histórico</h2>
+  <section class="bests" id="records"></section>
+
+  <h2>Últimas actividades</h2>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Fecha</th><th>Deporte</th><th>Actividad</th><th class="num">Duración</th><th class="num">Distancia</th><th class="num">FC media</th></tr></thead>
+      <tbody id="recent"></tbody>
+    </table>
+  </div>
+</main>
+
+<script id="data" type="application/json">__DATA__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const color = slot => css(slot === 'accent' ? '--accent' : `--s${slot}`);  // 'accent' = todos los deportes
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+// ---- Formatos (es-ES, como el Excel) ----
+const pace = s => s == null ? '–' : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`;
+const num = (v, f) => v == null ? '–' : v.toLocaleString('es-ES', {useGrouping: 'always', minimumFractionDigits: f === '0.0' ? 1 : 0, maximumFractionDigits: f === '0.0' ? 1 : 0});
+const fmt = (v, m) => m.format === 'm:ss' ? pace(v) : num(v, m.format);
+const dur = min => { const m = Math.round(min); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`; };
+const day = (iso, opts = {day: 'numeric', month: 'short'}) => new Date(iso + 'T00:00').toLocaleDateString('es-ES', opts);
+const sum = a => a.reduce((x, y) => x + (y ?? 0), 0);
+// Fecha local en AAAA-MM-DD (toISOString usaría UTC y en España restaría un día).
+const isoOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const last = D.weeks.length - 1;  // última semana con actividad, como "última semana" en el Excel
+const weekLabel = `semana del ${day(D.weeks[last])}`;
+document.getElementById('meta').textContent =
+  `${D.count} actividades · actualizado el ${day(D.generated, {day: 'numeric', month: 'long', year: 'numeric'})}`;
+
+// Línea mínima en SVG. Los volúmenes empiezan en 0 (semana sin sesiones = 0);
+// los niveles (VO2máx) se saltan los huecos y se escalan entre su mínimo y su máximo.
+function spark(values, slot, level = false) {
+  const pts = values.map((y, i) => [i, level ? y : (y ?? 0)]).filter(p => p[1] != null);
+  if (pts.length < 2) return '<svg class="spark"></svg>';
+  const ys = pts.map(p => p[1]);
+  const lo = level ? Math.min(...ys) : 0, span = (Math.max(...ys) - lo) || 1, n = values.length - 1;
+  const d = pts.map(([i, y]) => `${(i / n * 100).toFixed(1)},${(30 - (y - lo) / span * 28).toFixed(1)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none"><polyline points="${d}" fill="none" stroke="${color(slot)}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+function delta(now, prev, unitFmt, lowerIsBetter = false) {
+  if (now == null || prev == null || now === prev) return prev == null ? '' : 'igual que la anterior';
+  const better = lowerIsBetter ? now < prev : now > prev;
+  const arrow = now > prev ? '▲' : '▼';
+  const cls = lowerIsBetter ? (better ? 'up' : 'down') : '';  // en volumen, más no es "mejor": sin color
+  return `<span class="${cls}">${arrow} ${unitFmt(Math.abs(now - prev))}</span> vs la anterior`;
+}
+
+let charts = [];
+let weeksShown = 8;
+
+function render() {
+  charts.forEach(c => c.destroy());
+  charts = [];
+  const start = weeksShown ? Math.max(0, D.weeks.length - weeksShown) : 0;
+  const cut = a => a.slice(start);
+  const labels = cut(D.weeks).map(w => day(w));
+  const fromDate = D.weeks[start];
+
+  Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = css('--muted');
+  Chart.defaults.borderColor = css('--grid');
+  const tooltip = {backgroundColor: css('--ink'), titleColor: css('--surface'), bodyColor: css('--surface'), padding: 10, cornerRadius: 8, boxPadding: 4};
+  const xAxis = {grid: {display: false}, border: {color: css('--axis')}};
+
+  // ---- KPIs: la última semana frente a la anterior ----
+  const t = D.totals;
+  let kpis = `
+    <div class="card kpi"><div class="label">Tiempo · ${weekLabel}</div>
+      <div class="value">${dur(t.minutes[last])}</div>
+      <div class="delta">${delta(t.minutes[last], t.minutes[last - 1], dur)}</div>${spark(cut(t.minutes), 'accent')}</div>
+    <div class="card kpi"><div class="label">Sesiones</div>
+      <div class="value">${t.sessions[last]}</div>
+      <div class="delta">${delta(t.sessions[last], t.sessions[last - 1], v => v)}</div>${spark(cut(t.sessions), 'accent')}</div>`;
+  for (const s of D.sports) {
+    const m = s.metrics.find(m => m.chart === 'bar');
+    const v = m.values[last], unit = m.unit ? `<small>${m.unit}</small>` : '';
+    kpis += `<div class="card kpi"><div class="label"><span class="dot" style="background:${color(s.slot)}"></span>${s.name} · ${m.name.toLowerCase()}</div>
+      <div class="value">${v == null ? '0' : fmt(v, m)}${unit}</div>
+      <div class="delta">${v == null ? 'sin sesiones esta semana' : delta(v, m.values[last - 1] ?? 0, x => fmt(x, m) + (m.unit ? ' ' + m.unit : ''))}</div>${spark(cut(m.values), s.slot)}</div>`;
+  }
+  if (D.vo2max.length) {
+    // VO2máx: lo estima el reloj en las carreras; se muestra el último valor.
+    const v = D.vo2max, now = v[v.length - 1], prev = v[v.length - 2];
+    kpis += `<div class="card kpi"><div class="label"><span class="dot" style="background:${color(1)}"></span>VO2máx · ${day(now.date)}</div>
+      <div class="value">${now.value}</div>
+      <div class="delta">${prev ? delta(now.value, prev.value, x => x).replace('vs la anterior', 'vs la carrera anterior') : ''}</div>${spark(v.map(x => x.value), 1, true)}</div>`;
+  }
+  document.getElementById('kpis').innerHTML = kpis;
+
+  // ---- Resumen del periodo elegido ----
+  const nWeeks = D.weeks.length - start;
+  const lastDay = new Date(D.weeks[last] + 'T00:00');
+  lastDay.setDate(lastDay.getDate() + 6);
+  const daysTrained = Object.keys(D.days).filter(d => d >= fromDate).length;
+  const metricSum = (sport, metric) => {
+    const s = D.sports.find(s => s.name === sport), m = s && s.metrics.find(m => m.name === metric);
+    return m ? [sum(cut(m.values)), m] : [null, null];
+  };
+  const tile = (label, value, sub, slot) => `<div class="card kpi"><div class="label">${slot ? `<span class="dot" style="background:${color(slot)}"></span>` : ''}${label}</div>
+    <div class="value">${value}</div><div class="delta">${sub}</div></div>`;
+  document.getElementById('period-title').textContent =
+    `Resumen · ${weeksShown ? `últimas ${nWeeks} semanas` : 'todo el histórico'} (${day(fromDate)} – ${day(isoOf(lastDay))})`;
+  const [km, kmM] = metricSum('Correr', 'Km'), [swim, swimM] = metricSum('Natación', 'Metros');
+  const sessionsOf = name => (D.sports.find(s => s.name === name)?.sessions || []).filter(x => x.date >= fromDate).length;
+  document.getElementById('period').innerHTML = [
+    tile('Tiempo total', dur(sum(cut(t.minutes))), `${dur(sum(cut(t.minutes)) / nWeeks)} por semana`),
+    tile('Sesiones', sum(cut(t.sessions)), `${num(sum(cut(t.sessions)) / nWeeks, '0.0')} por semana`),
+    tile('Días entrenados', daysTrained, `de ${nWeeks * 7} días`),
+    kmM ? tile('Correr', `${fmt(km, kmM)}<small>km</small>`, `${sessionsOf('Correr')} salidas`, 1) : '',
+    swimM ? tile('Natación', `${fmt(swim, swimM)}<small>m</small>`, `${sessionsOf('Natación')} sesiones`, 2) : '',
+    tile('Calorías', `${num(sum(cut(t.calories)), '0')}<small>kcal</small>`, `${num(sum(cut(t.calories)) / nWeeks, '0')} por semana`),
+  ].join('');
+
+  // ---- Tiempo semanal apilado por deporte ----
+  document.getElementById('legend').innerHTML = D.sports.map(s =>
+    `<span><span class="dot" style="background:${color(s.slot)}"></span>${s.name}</span>`).join('');
+  charts.push(new Chart(document.getElementById('weekly'), {
+    type: 'bar',
+    data: {labels, datasets: D.sports.map(s => ({
+      label: s.name, data: cut(s.minutes), backgroundColor: color(s.slot),
+      borderColor: css('--surface'), borderWidth: {top: 2}, borderSkipped: 'bottom', borderRadius: 4, maxBarThickness: 44,
+    }))},
+    options: {
+      maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tooltip,
+        callbacks: {title: i => `Semana del ${i[0].label}`, label: c => ` ${c.dataset.label}: ${dur(c.raw)}`,
+                    footer: i => `Total: ${dur(sum(i.map(x => x.raw)))}`}}},
+      scales: {x: {...xAxis, stacked: true, ticks: {maxRotation: 0, autoSkipPadding: 8}}, y: {stacked: true, border: {display: false}, ticks: {callback: v => `${v} min`, maxTicksLimit: 5}}},
+    },
+  }));
+
+  // ---- Un panel por deporte ----
+  document.getElementById('sports').innerHTML = D.sports.map((s, i) => {
+    const facts = s.metrics.map(m =>
+      `<span>${m.name}: <b>${fmt(m.values[last], m)}${m.values[last] != null && m.unit && m.format !== 'm:ss' ? ' ' + m.unit : ''}</b></span>`).join('');
+    const hasPace = s.metrics.some(m => m.format === 'm:ss');
+    return `<div class="card">
+      <div class="sport-head"><span class="dot" style="background:${color(s.slot)}"></span><strong>${s.name}</strong></div>
+      <div class="facts"><span class="sub">${weekLabel}</span>${facts}</div>
+      <div class="chart small"><canvas id="vol-${i}"></canvas></div>
+      <div class="hint">${hasPace ? 'Ritmo de cada sesión · arriba = más rápido' : 'FC media de cada sesión'}</div>
+      <div class="chart small"><canvas id="ses-${i}"></canvas></div>
+    </div>`;
+  }).join('');
+
+  D.sports.forEach((s, i) => {
+    const vol = s.metrics.find(m => m.chart === 'bar' && m.name !== 'Sesiones') || s.metrics.find(m => m.chart === 'bar');
+    const unit = vol.unit ? ' ' + vol.unit : '';
+    charts.push(new Chart(document.getElementById(`vol-${i}`), {
+      type: 'bar',
+      data: {labels, datasets: [{data: cut(vol.values), backgroundColor: color(s.slot), borderRadius: 4, maxBarThickness: 36}]},
+      options: {
+        maintainAspectRatio: false,
+        plugins: {legend: {display: false}, title: {display: true, text: `${vol.name} por semana`, align: 'start', color: css('--ink-2'), font: {weight: 500}},
+                  tooltip: {...tooltip, callbacks: {title: i => `Semana del ${i[0].label}`, label: c => ` ${fmt(c.raw, vol)}${unit}`}}},
+        scales: {x: {...xAxis, ticks: {maxRotation: 0, autoSkipPadding: 8}}, y: {border: {display: false}, ticks: {maxTicksLimit: 4, callback: v => num(v, '0')}}},
+      },
+    }));
+
+    // Sesión a sesión: ritmo (si el deporte lo tiene) o FC. La FC del ritmo va en el tooltip:
+    // dos escalas en un mismo gráfico confunden más que ayudan.
+    const isPace = s.metrics.some(m => m.format === 'm:ss');
+    const ses = s.sessions.filter(x => x.date >= fromDate && (isPace ? x.pace != null : x.hr != null));
+    const paceUnit = s.name === 'Natación' ? '/100 m' : '/km';
+    const ys = ses.map(x => x.pace), span = isPace && ys.length ? Math.max(...ys) - Math.min(...ys) : 0;
+    const step = span > 240 ? 60 : span > 90 ? 30 : 15;
+    charts.push(new Chart(document.getElementById(`ses-${i}`), {
+      type: 'line',
+      data: {labels: ses.map(x => day(x.date)), datasets: [{
+        data: ses.map(x => isPace ? x.pace : x.hr), borderColor: color(s.slot), backgroundColor: color(s.slot),
+        borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: css('--surface'), pointBorderWidth: 2, tension: 0.25,
+      }]},
+      options: {
+        maintainAspectRatio: false,
+        interaction: {mode: 'index', intersect: false},
+        plugins: {legend: {display: false}, tooltip: {...tooltip, callbacks: {
+          title: it => ses[it[0].dataIndex].name,
+          label: c => {
+            const x = ses[c.dataIndex];
+            return [` ${day(x.date, {weekday: 'short', day: 'numeric', month: 'short'})} · ${dur(x.minutes)}`,
+                    isPace ? ` Ritmo ${pace(x.pace)} ${paceUnit}` : null,
+                    x.hr ? ` FC media ${Math.round(x.hr)} lpm` : null,
+                    x.cadence ? ` Cadencia ${x.cadence} ${s.name === 'Natación' ? 'brazadas/min' : 'pasos/min'}` : null,
+                    x.power ? ` Potencia ${Math.round(x.power)} W` : null,
+                    x.te ? ` Efecto aeróbico ${num(x.te, '0.0')}` : null].filter(Boolean);
+          }}}},
+        scales: {
+          x: {...xAxis, ticks: {maxTicksLimit: 8, maxRotation: 0}},
+          y: {reverse: isPace, border: {display: false}, ticks: {maxTicksLimit: isPace ? 8 : 5, ...(isPace && {stepSize: step}), callback: v => isPace ? pace(v) : `${v} lpm`}},
+        },
+      },
+    }));
+  });
+
+  // ---- Zonas de FC: minutos por zona y semana (un solo tono, de claro = suave a oscuro = intenso) ----
+  const zoneNames = ['Z1 muy suave', 'Z2 suave', 'Z3 moderada', 'Z4 intensa', 'Z5 máxima'];
+  document.getElementById('zone-legend').innerHTML = zoneNames.map((z, k) =>
+    `<span><span class="dot" style="background:var(--z${k + 1})"></span>${z}</span>`).join('');
+  const zones = cut(t.zones), zoneTot = [0, 1, 2, 3, 4].map(k => sum(zones.map(w => w[k])));
+  const easyPct = Math.round((zoneTot[0] + zoneTot[1]) / (sum(zoneTot) || 1) * 100);
+  document.getElementById('zone-hint').textContent =
+    `En este periodo, el ${easyPct} % del tiempo con pulsómetro fue suave (Z1–Z2) y el ${100 - easyPct} % en Z3–Z5.`;
+  charts.push(new Chart(document.getElementById('zones'), {
+    type: 'bar',
+    data: {labels, datasets: zoneNames.map((z, k) => ({
+      label: z, data: zones.map(w => w[k]), backgroundColor: css(`--z${k + 1}`),
+      borderColor: css('--surface'), borderWidth: {top: 2}, borderSkipped: 'bottom', borderRadius: 3, maxBarThickness: 40,
+    }))},
+    options: {
+      maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tooltip, callbacks: {
+        title: i => `Semana del ${i[0].label}`, label: c => ` ${c.dataset.label}: ${dur(c.raw)}`}}},
+      scales: {x: {...xAxis, stacked: true, ticks: {maxRotation: 0, autoSkipPadding: 8}}, y: {stacked: true, border: {display: false}, ticks: {maxTicksLimit: 5, callback: v => `${v} min`}}},
+    },
+  }));
+
+  // ---- Carga semanal y su media de 4 semanas ----
+  charts.push(new Chart(document.getElementById('load'), {
+    data: {labels, datasets: [
+      {type: 'line', label: 'Media de 4 semanas', data: cut(t.load_avg4), borderColor: css('--ink-2'), borderWidth: 2,
+       pointRadius: 0, pointHoverRadius: 4, tension: 0.3, order: 0},
+      {type: 'bar', label: 'Carga', data: cut(t.load), backgroundColor: css('--accent'), borderRadius: 4, maxBarThickness: 40, order: 1},
+    ]},
+    options: {
+      maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tooltip, callbacks: {
+        title: i => `Semana del ${i[0].label}`, label: c => ` ${c.dataset.label}: ${num(c.raw, '0')}`}}},
+      scales: {x: {...xAxis, ticks: {maxRotation: 0, autoSkipPadding: 8}}, y: {border: {display: false}, ticks: {maxTicksLimit: 5}}},
+    },
+  }));
+
+  // ---- Hábitos: día de la semana y hora, apilados por deporte ----
+  document.querySelectorAll('.sport-legend').forEach(el => el.innerHTML = document.getElementById('legend').innerHTML);
+  const inRange = s => s.sessions.filter(x => x.date >= fromDate);
+  const weekday = iso => (new Date(iso + 'T00:00').getDay() + 6) % 7;  // 0 = lunes
+  const hours = D.sports.flatMap(s => inRange(s).map(x => x.hour));
+  const h0 = Math.min(...hours, 8), h1 = Math.max(...hours, 21);
+  const hourLabels = Array.from({length: h1 - h0 + 1}, (_, k) => `${h0 + k} h`);
+  const habit = (id, labelsX, bucket, title) => charts.push(new Chart(document.getElementById(id), {
+    type: 'bar',
+    data: {labels: labelsX, datasets: D.sports.map(s => {
+      const counts = labelsX.map(() => 0);
+      inRange(s).forEach(x => counts[bucket(x)]++);
+      return {label: s.name, data: counts, backgroundColor: color(s.slot), borderColor: css('--surface'),
+              borderWidth: {top: 2}, borderSkipped: 'bottom', borderRadius: 3, maxBarThickness: 40};
+    })},
+    options: {
+      maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tooltip, filter: c => c.raw > 0, callbacks: {
+        title: title, label: c => ` ${c.dataset.label}: ${c.raw}`, footer: i => `Total: ${sum(i.map(x => x.raw))} sesiones`}}},
+      scales: {x: {...xAxis, stacked: true, ticks: {maxRotation: 0, autoSkipPadding: 6}},
+               y: {stacked: true, border: {display: false}, ticks: {precision: 0, maxTicksLimit: 5}}},
+    },
+  }));
+  habit('dow', ['L', 'M', 'X', 'J', 'V', 'S', 'D'], x => weekday(x.date),
+        i => ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][i[0].dataIndex]);
+  habit('hours', hourLabels, x => x.hour - h0, i => `De ${h0 + i[0].dataIndex}:00 a ${h0 + i[0].dataIndex + 1}:00`);
+}
+
+// ---- Constancia: racha y calendario (no dependen del periodo elegido) ----
+(function constancy() {
+  let streak = 0;
+  for (let i = last; i >= 0 && D.totals.sessions[i] > 0; i--) streak++;
+  const active = D.totals.sessions.filter(n => n > 0).length;
+  document.getElementById('streak').textContent = `${streak} ${streak === 1 ? 'semana' : 'semanas'}`;
+  document.getElementById('streak-sub').textContent = `${active} de ${D.weeks.length} semanas con algún entreno`;
+
+  const level = m => m < 30 ? 1 : m < 60 ? 2 : m < 90 ? 3 : 4;
+  const first = new Date(D.weeks[0] + 'T00:00'), lastDay = new Date(D.weeks[last] + 'T00:00');
+  lastDay.setDate(lastDay.getDate() + 6);
+  let cells = '';
+  for (let d = new Date(first); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    const iso = isoOf(d);
+    const info = D.days[iso];
+    const label = day(iso, {weekday: 'short', day: 'numeric', month: 'short'});
+    cells += info
+      ? `<div class="l${level(info.minutes)}" title="${label} · ${dur(info.minutes)} · ${esc(info.sports.join(', '))}"></div>`
+      : `<div title="${label} · descanso"></div>`;
+  }
+  document.getElementById('heat').innerHTML = cells;
+})();
+
+// ---- Mejores marcas y últimas actividades ----
+document.getElementById('bests').innerHTML = D.bests.map(b => `
+  <div class="card best"><div class="sub">${b.label}</div>
+    <div class="value">${b.seconds == null ? '–' : b.seconds >= 3600 ? `${Math.floor(b.seconds / 3600)}:${pace(b.seconds % 3600).padStart(5, '0')}` : pace(b.seconds)}</div>
+    <div class="sub">${b.seconds == null ? 'sin marca todavía' : `${pace(b.pace)} /km · ${day(b.date)} · ${esc(b.name)}`}</div></div>`).join('');
+
+// ---- Récords de todo el histórico ----
+(function records() {
+  const all = D.sports.flatMap(s => s.sessions.map(x => ({...x, sport: s.name, slot: s.slot})));
+  const top = (list, key) => list.reduce((a, b) => (b[key] ?? -1) > (a?.[key] ?? -1) ? b : a, null);
+  const of = name => all.filter(x => x.sport === name);
+  const card = (label, value, sub, slot) => `<div class="card best"><div class="sub" style="display:flex;align-items:center;gap:6px">${
+    slot ? `<span class="dot" style="background:${color(slot)}"></span>` : ''}${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+  const where = x => `${day(x.date)} · ${esc(x.name)}`;
+  const t = D.totals, out = [];
+  const longest = top(all, 'minutes');
+  if (longest) out.push(card('Sesión más larga', dur(longest.minutes), `${longest.sport} · ${where(longest)}`, longest.slot));
+  const run = top(of('Correr'), 'km');
+  if (run) out.push(card('Carrera más larga', `${num(run.km, '0.0')} km`, where(run), 1));
+  const swim = top(of('Natación'), 'km');
+  if (swim) out.push(card('Más metros nadados', `${num(swim.km * 1000, '0')} m`, where(swim), 2));
+  const bestWeek = t.minutes.indexOf(Math.max(...t.minutes));
+  out.push(card('Semana con más tiempo', dur(t.minutes[bestWeek]), `semana del ${day(D.weeks[bestWeek])} · ${t.sessions[bestWeek]} sesiones`));
+  const loadWeek = t.load.indexOf(Math.max(...t.load));
+  out.push(card('Semana con más carga', num(t.load[loadWeek], '0'), `semana del ${day(D.weeks[loadWeek])}`));
+  if (D.vo2max.length) {
+    const v = D.vo2max.reduce((a, b) => b.value > a.value ? b : a);
+    out.push(card('VO2máx más alto', v.value, day(v.date), 1));
+  }
+  document.getElementById('records').innerHTML = out.join('');
+})();
+
+document.getElementById('recent').innerHTML = D.recent.map(r => `<tr>
+  <td>${day(r.date, {weekday: 'short', day: 'numeric', month: 'short'})}</td>
+  <td><span style="display:inline-flex;align-items:center;gap:6px"><span class="dot" style="background:${color(r.slot)}"></span>${esc(r.sport)}</span></td>
+  <td>${esc(r.name)}</td>
+  <td class="num">${dur(r.minutes)}</td>
+  <td class="num">${r.km ? `${num(r.km, '0.0')} km` : '–'}</td>
+  <td class="num">${r.hr ? `${Math.round(r.hr)} lpm` : '–'}</td></tr>`).join('');
+
+// ---- Selector de periodo ----
+const buttons = [...document.querySelectorAll('#range button')];
+function pick(weeks) {
+  weeksShown = weeks;
+  buttons.forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.weeks === weeks)));
+  render();
+}
+buttons.forEach(b => b.addEventListener('click', () => pick(+b.dataset.weeks)));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+pick(8);
+</script>
+</body>
+</html>

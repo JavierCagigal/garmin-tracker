@@ -135,15 +135,21 @@ def _chart(kind: str, title: str, number_format: str):
     return chart
 
 
-def add_sport_sheets(wb: Workbook, rows: list[ActivityRow]) -> None:
-    if not rows:
-        return
+def weekly_buckets(rows: list[ActivityRow]) -> tuple[list[date], dict[date, list[ActivityRow]]]:
+    """Lunes de todas las semanas entre la primera y la última actividad
+    (incluidas las de descanso) y las actividades de cada una. `rows` no vacío."""
     by_week: dict[date, list[ActivityRow]] = defaultdict(list)
     for r in rows:
         by_week[r.date - timedelta(days=r.date.weekday())].append(r)
-    # Mismo eje de semanas en todas las pestañas, para poder compararlas.
     first, last = min(by_week), max(by_week)
-    mondays = [first + timedelta(weeks=i) for i in range((last - first).days // 7 + 1)]
+    return [first + timedelta(weeks=i) for i in range((last - first).days // 7 + 1)], by_week
+
+
+def add_sport_sheets(wb: Workbook, rows: list[ActivityRow]) -> None:
+    if not rows:
+        return
+    # Mismo eje de semanas en todas las pestañas, para poder compararlas.
+    mondays, by_week = weekly_buckets(rows)
 
     for sport in SPORTS:
         weeks = [[r for r in by_week.get(m, []) if r.sport_key in sport.keys] for m in mondays]

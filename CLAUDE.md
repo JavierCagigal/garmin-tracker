@@ -19,13 +19,14 @@ Proyecto personal. Se responde en español.
 ```bash
 ./.venv/bin/python scripts/sync.py            # descarga incremental desde Garmin
 ./.venv/bin/python scripts/generate_excel.py  # regenera el Excel desde SQLite
+./.venv/bin/python scripts/generate_web.py    # regenera el panel web desde SQLite
 ./.venv/bin/python -m pytest -q               # tests
 ```
 
 ## Automatización semanal (launchd, no systemd)
 
-`launchd/com.javiercagigal.garmin-tracker.plist` hace sync + Excel **los lunes a
-las 07:00**. Instalado en `~/Library/LaunchAgents/`. Tras formatear:
+`launchd/com.javiercagigal.garmin-tracker.plist` hace sync + Excel + web **los
+lunes a las 07:00**. Instalado en `~/Library/LaunchAgents/`. Tras formatear:
 
 ```bash
 mkdir -p ~/Library/LaunchAgents && cp launchd/*.plist ~/Library/LaunchAgents/
@@ -56,6 +57,24 @@ Ciclismo · Fuerza · Notas.
   `excel_charts.SPORTS`, que también usa Progresión.
 - **Notas**: columnas manuales del usuario, que se **conservan** entre
   regeneraciones (se fusionan por activityId). Cualquier otra edición manual se pierde.
+
+## El panel web (`output/entrenamientos.html`, gitignored)
+
+Página estática, más visual que el Excel, con el estilo de un dashboard blanco
+(tarjetas con sparklines, selector 4/8/12 sem/Todo). Generada por `web.py` a
+partir de la plantilla `web_template.html`, con los datos incrustados como JSON:
+se abre con doble clic. Reutiliza `excel_charts.SPORTS` y `weekly_buckets`, así
+que las cifras coinciden con el Excel. Usa Chart.js desde cdnjs (hace falta
+internet) y respeta el modo claro/oscuro del sistema. No lleva coordenadas GPS.
+No se usa doble eje: el ritmo va en su propia gráfica y la FC sale en el tooltip.
+Colores elegidos por el usuario: Correr rojo, Natación azul, Ciclismo verde agua,
+Fuerza amarillo; violeta = todos los deportes juntos (totales, calendario, zonas, carga).
+Secciones: KPIs de la última semana (+ VO2máx), resumen del periodo elegido,
+tiempo semanal por deporte + constancia, zonas de FC + carga (TRIMP, media 4 sem),
+panel por deporte, hábitos (día de la semana y hora), mejores marcas, récords
+históricos y últimas actividades.
+Pendiente: publicarla en GitHub Pages. El repo es privado y Pages siempre es
+público; está sin decidir si se hace público o se usa un repo aparte.
 
 ## Decisiones tomadas con el usuario
 
